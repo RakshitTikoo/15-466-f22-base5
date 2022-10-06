@@ -13,23 +13,23 @@
 
 #include <random>
 
-GLuint phonebank_meshes_for_lit_color_texture_program = 0;
-Load< MeshBuffer > phonebank_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("phone-bank.pnct"));
-	phonebank_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
+GLuint Vribe_meshes_for_lit_color_texture_program = 0;
+Load< MeshBuffer > Vribe_meshes(LoadTagDefault, []() -> MeshBuffer const * {
+	MeshBuffer const *ret = new MeshBuffer(data_path("Vribe.pnct"));
+	Vribe_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
 	return ret;
 });
 
-Load< Scene > phonebank_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("phone-bank.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = phonebank_meshes->lookup(mesh_name);
+Load< Scene > Vribe_scene(LoadTagDefault, []() -> Scene const * {
+	return new Scene(data_path("Vribe.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
+		Mesh const &mesh = Vribe_meshes->lookup(mesh_name);
 
 		scene.drawables.emplace_back(transform);
 		Scene::Drawable &drawable = scene.drawables.back();
 
 		drawable.pipeline = lit_color_texture_program_pipeline;
 
-		drawable.pipeline.vao = phonebank_meshes_for_lit_color_texture_program;
+		drawable.pipeline.vao = Vribe_meshes_for_lit_color_texture_program;
 		drawable.pipeline.type = mesh.type;
 		drawable.pipeline.start = mesh.start;
 		drawable.pipeline.count = mesh.count;
@@ -37,34 +37,131 @@ Load< Scene > phonebank_scene(LoadTagDefault, []() -> Scene const * {
 	});
 });
 
+// Add Walkmesh code
+
+// *******************************************************************************************************************************************************************
+// Lookup fails. Tried to print out meshes, but list is empty. The export-walkmeshes clearly creates the output file. Walkmesh Code Implemented. Game not implemented.
+// *******************************************************************************************************************************************************************
 WalkMesh const *walkmesh = nullptr;
-Load< WalkMeshes > phonebank_walkmeshes(LoadTagDefault, []() -> WalkMeshes const * {
-	WalkMeshes *ret = new WalkMeshes(data_path("phone-bank.w"));
-	walkmesh = &ret->lookup("WalkMesh");
+Load< WalkMeshes > Vribe_walkmeshes(LoadTagDefault, []() -> WalkMeshes const * {
+	WalkMeshes *ret = new WalkMeshes(data_path("Vribe1.w"));
+	//walkmesh = &ret->lookup("PlatForm"); // Lookup not working
+	walkmesh = &ret->first();
 	return ret;
 });
 
-PlayMode::PlayMode() : scene(*phonebank_scene) {
-	//create a player transform:
-	scene.transforms.emplace_back();
-	player.transform = &scene.transforms.back();
 
-	//create a player camera attached to a child of the player transform:
-	scene.transforms.emplace_back();
-	scene.cameras.emplace_back(&scene.transforms.back());
-	player.camera = &scene.cameras.back();
-	player.camera->fovy = glm::radians(60.0f);
-	player.camera->near = 0.01f;
-	player.camera->transform->parent = player.transform;
+Load< Sound::Sample > Main_Song_1_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Main5.opus"));
+});
+//
+//Load< Sound::Sample > Main_Song_2_sample(LoadTagDefault, []() -> Sound::Sample const * {
+//	return new Sound::Sample(data_path("Main2.opus"));
+//});
+//
+//Load< Sound::Sample > Main_Song_3_sample(LoadTagDefault, []() -> Sound::Sample const * {
+//	return new Sound::Sample(data_path("Main3.opus"));
+//});
+//
+//Load< Sound::Sample > Main_Song_4_sample(LoadTagDefault, []() -> Sound::Sample const * {
+//	return new Sound::Sample(data_path("Main4.opus"));
+//});
+//
+//Load< Sound::Sample > Main_Song_5_sample(LoadTagDefault, []() -> Sound::Sample const * {
+//	return new Sound::Sample(data_path("Main5.opus"));
+//});
+//
+//
+Load< Sound::Sample > Rain_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Rain.opus"));
+});
 
-	//player's eyes are 1.8 units above the ground:
-	player.camera->transform->position = glm::vec3(0.0f, 0.0f, 1.8f);
+Load< Sound::Sample > Car_sample(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("Car.opus"));
+});
 
-	//rotate camera facing direction (-z) to player facing direction (+y):
-	player.camera->transform->rotation = glm::angleAxis(glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 
-	//start player walking at nearest walk point:
+
+void PlayMode::get_transforms() {
+
+	for(uint32_t i = 0; i < 42; i = i + 1) {
+		obstacle[i] = nullptr;
+	}
+
+	//get pointers to leg for convenience:
+	for (auto &transform : scene.transforms) {
+
+		if (transform.name == "Player_Car") player.transform = &transform;
+		else {
+			std::string obstacle_str;
+			for(uint32_t i = 0; i < 42; i = i + 1) {
+				if(i < 10)
+					obstacle_str = std::string("Obstacle.00") + std::to_string(i); 
+				else 
+					obstacle_str = std::string("Obstacle.0") + std::to_string(i); 
+
+				if (transform.name == obstacle_str) obstacle[i] = &transform;
+				
+			}
+		}		
+	}
+
+
+
+
+	if (player.transform == nullptr) throw std::runtime_error("player not found.");
+	for(uint32_t i = 0; i < 42; i = i + 1) {
+		if (obstacle[i] == nullptr) throw std::runtime_error("obstacle not found.");
+	}
+
+	// Update player walkpoint 
 	player.at = walkmesh->nearest_walk_point(player.transform->position);
+
+	//get pointer to camera for convenience:
+	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
+	camera = &scene.cameras.front();
+
+	if (camera == nullptr) printf("No Camera found.");
+
+	//Rain1_pos = Rain1->position;
+	//Rain2_pos = Rain2->position;
+	//Rain3_pos = Rain3->position;
+
+	
+}
+
+
+void PlayMode::init(int i) {
+	if(i == 0)
+	 {
+		get_transforms();
+
+		//camera->transform->position.x = -0.0f; camera->transform->position.y = 144.520065f; camera->transform->position.z = 89.564598f;
+		camera->transform->position.x = player.transform->position.x; camera->transform->position.y =  player.transform->position.y + 10.0f; camera->transform->position.z =  player.transform->position.z + 20.0f;
+		camera->transform->rotation.w = 0.0f; camera->transform->rotation.x = 0.0f; camera->transform->rotation.y = -0.422618f; camera->transform->rotation.z = -0.906308f;
+
+	 }
+
+	rain_vol = 1.5f;
+	car_vol = 0.0f;
+	rain_rate = 20.0f;
+	car_speed = 0.0f;
+	max_speed = 60.0f;
+	main1_vol = 0.0f;
+
+}
+
+PlayMode::PlayMode() : scene(*Vribe_scene) {
+	
+	init(0);
+	
+	//start playing music:
+	RainLoop = Sound::loop(*Rain_sample,rain_vol, 0.0f);
+	CarLoop = Sound::loop(*Car_sample,car_vol, 0.0f);
+	Main1Loop  = Sound::loop(*Main_Song_1_sample,main1_vol, 0.0f);
+
+	//player.transform = Player_Car;
+	
 
 }
 
@@ -74,10 +171,7 @@ PlayMode::~PlayMode() {
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
 
 	if (evt.type == SDL_KEYDOWN) {
-		if (evt.key.keysym.sym == SDLK_ESCAPE) {
-			SDL_SetRelativeMouseMode(SDL_FALSE);
-			return true;
-		} else if (evt.key.keysym.sym == SDLK_a) {
+		if (evt.key.keysym.sym == SDLK_a) {
 			left.downs += 1;
 			left.pressed = true;
 			return true;
@@ -108,47 +202,128 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			down.pressed = false;
 			return true;
 		}
-	} else if (evt.type == SDL_MOUSEBUTTONDOWN) {
-		if (SDL_GetRelativeMouseMode() == SDL_FALSE) {
-			SDL_SetRelativeMouseMode(SDL_TRUE);
-			return true;
-		}
-	} else if (evt.type == SDL_MOUSEMOTION) {
-		if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
-			glm::vec2 motion = glm::vec2(
-				evt.motion.xrel / float(window_size.y),
-				-evt.motion.yrel / float(window_size.y)
-			);
-			glm::vec3 upDir = walkmesh->to_world_smooth_normal(player.at);
-			player.transform->rotation = glm::angleAxis(-motion.x * player.camera->fovy, upDir) * player.transform->rotation;
-
-			float pitch = glm::pitch(player.camera->transform->rotation);
-			pitch += motion.y * player.camera->fovy;
-			//camera looks down -z (basically at the player's feet) when pitch is at zero.
-			pitch = std::min(pitch, 0.95f * 3.1415926f);
-			pitch = std::max(pitch, 0.05f * 3.1415926f);
-			player.camera->transform->rotation = glm::angleAxis(pitch, glm::vec3(1.0f, 0.0f, 0.0f));
-
-			return true;
-		}
-	}
+	} 
 
 	return false;
 }
 
 void PlayMode::update(float elapsed) {
-	//player walking:
-	{
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 3.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
 
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
+	// =======================
+	// Rain Animation
+	// =======================
+	//Rain1->position.x -= (rain_rate*elapsed);
+	//Rain1->position.z -= (rain_rate*elapsed);
+	//Rain2->position.x -= (rain_rate*elapsed);
+	//Rain2->position.z -= (rain_rate*elapsed);
+	//Rain3->position.x -= (rain_rate*elapsed);
+	//Rain3->position.z -= (rain_rate*elapsed);
+
+	//if(Rain1->position.z < Side_Ground->position.z) Rain1->position = Rain1_pos;
+	//if(Rain2->position.z < Side_Ground->position.z) Rain2->position = Rain2_pos;
+	//if(Rain3->position.z < Side_Ground->position.z) Rain3->position = Rain3_pos;
+	
+
+	// ========================
+	// Player Movement
+	// ========================
+	glm::vec2 move = glm::vec2(0.0f);
+	if (left.pressed && !right.pressed) move.x =-1.0f;
+	if (!left.pressed && right.pressed) move.x = 1.0f;
+	move.y = 1;
+	//if (down.pressed && !up.pressed) move.y =-1.0f;
+	//if (!down.pressed && up.pressed) move.y = 1.0f;
+
+	if(up.pressed == 1) {
+		
+		car_speed += 2.0f;
+		car_vol += 0.02f;
+
+		if(car_speed > max_speed) car_speed = max_speed;
+		if(car_vol > 1.0f) car_vol = 1.0f;
+
+		if(left.pressed == 1) {}
+		if(right.pressed == 1) {}
+	}
+	if (down.pressed == 1) {
+		car_speed -= 3.0f;
+		car_vol -= 0.03f;
+
+		if(car_speed < -1.0f*max_speed) car_speed = -1.0f*max_speed;
+		if(car_vol < 0.0f) car_vol = 0.0f;
+	}
+
+	if(up.pressed == 0 && down.pressed == 0) {
+		car_speed -= 2.0f;
+		car_vol -= 0.02f;
+
+		if(car_speed < 0.0f) car_speed = 0.0f;
+		if(car_vol < 0.0f) car_vol = 0.0f;
+	}
+
+	if(car_speed > 0.0f) main1_vol += 0.2f;
+	else main1_vol -= 0.2f;
+
+	if(main1_vol > 10.0f) main1_vol = 10.0f;
+	if(main1_vol < 0.0f) main1_vol = 0.0f;
+
+	move.x = 0.1f*max_speed*move.x*elapsed;
+	move.y = car_speed*move.y*elapsed;
+
+	//glm::vec3 remain = player.transform->make_local_to_world() * glm::vec4(move.x, move.y, 0.0f, 0.0f);
+
+
+	// =====================
+	// Enemy Collision
+	// =====================
+
+
+
+	// =======================
+	// Volume Control
+	// =======================
+
+	CarLoop->volume = car_vol;
+	Main1Loop->volume = main1_vol;
+
+
+
+
+		//move camera:
+	//{
+//
+	//	//combine inputs into a move:
+	//	constexpr float PlayerSpeed = 30.0f;
+	//	glm::vec2 move = glm::vec2(0.0f);
+	//	if (left.pressed && !right.pressed) move.x =-1.0f;
+	//	if (!left.pressed && right.pressed) move.x = 1.0f;
+	//	if (down.pressed && !up.pressed) move.y =-1.0f;
+	//	if (!down.pressed && up.pressed) move.y = 1.0f;
+//
+	//	//make it so that moving diagonally doesn't go faster:
+	//	if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
+//
+	//	glm::mat4x3 frame = camera->transform->make_local_to_parent();
+	//	glm::vec3 frame_right = frame[0];
+	//	//glm::vec3 up = frame[1];
+	//	glm::vec3 frame_forward = -frame[2];
+//
+	//	camera->transform->position += move.x * frame_right + move.y * frame_forward;
+	//}
+	
+	
+	//player walking:
+	//{
+		//combine inputs into a move:
+		//constexpr float PlayerSpeed = 3.0f;
+		//glm::vec2 move = glm::vec2(0.0f);
+		//if (left.pressed && !right.pressed) move.x =-1.0f;
+		//if (!left.pressed && right.pressed) move.x = 1.0f;
+		//if (down.pressed && !up.pressed) move.y =-1.0f;
+		//if (!down.pressed && up.pressed) move.y = 1.0f;
+//
+		//////make it so that moving diagonally doesn't go faster:
+		if (move != glm::vec2(0.0f)) move = glm::normalize(move);
 
 		//get move in world coordinate system:
 		glm::vec3 remain = player.transform->make_local_to_world() * glm::vec4(move.x, move.y, 0.0f, 0.0f);
@@ -183,7 +358,7 @@ void PlayMode::update(float elapsed) {
 				glm::vec3 along = glm::normalize(b-a);
 				glm::vec3 normal = glm::normalize(glm::cross(b-a, c-a));
 				glm::vec3 in = glm::cross(normal, along);
-
+//
 				//check how much 'remain' is pointing out of the triangle:
 				float d = glm::dot(remain, in);
 				if (d < 0.0f) {
@@ -195,14 +370,14 @@ void PlayMode::update(float elapsed) {
 				}
 			}
 		}
-
+//
 		if (remain != glm::vec3(0.0f)) {
 			std::cout << "NOTE: code used full iteration budget for walking." << std::endl;
 		}
-
+//
 		//update player's position to respect walking:
 		player.transform->position = walkmesh->to_world_point(player.at);
-
+//
 		{ //update player's rotation to respect local (smooth) up-vector:
 			
 			glm::quat adjust = glm::rotation(
@@ -211,16 +386,16 @@ void PlayMode::update(float elapsed) {
 			);
 			player.transform->rotation = glm::normalize(adjust * player.transform->rotation);
 		}
+//
+		
+		//glm::mat4x3 frame = camera->transform->make_local_to_parent();
+		//glm::vec3 right = frame[0];
+		////glm::vec3 up = frame[1];
+		//glm::vec3 forward = -frame[2];
 
-		/*
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 forward = -frame[2];
-
-		camera->transform->position += move.x * right + move.y * forward;
-		*/
-	}
+		//camera->transform->position += move.x * right + move.y * forward;
+		
+	//}
 
 	//reset button press counters:
 	left.downs = 0;
@@ -231,7 +406,7 @@ void PlayMode::update(float elapsed) {
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	//update camera aspect ratio for drawable:
-	player.camera->aspect = float(drawable_size.x) / float(drawable_size.y);
+	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
 
 	//set up light type and position for lit_color_texture_program:
 	// TODO: consider using the Light(s) in the scene to do this
@@ -248,7 +423,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
 
-	scene.draw(*player.camera);
+	scene.draw(*camera);
 
 	/* In case you are wondering if your walkmesh is lining up with your scene, try:
 	{

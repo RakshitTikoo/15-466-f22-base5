@@ -99,6 +99,9 @@ struct WalkMeshes {
 	//retrieve a WalkMesh by name:
 	WalkMesh const &lookup(std::string const &name) const;
 
+	//Temporary code created
+	WalkMesh const &first() const;
+
 	//internals:
 	std::unordered_map< std::string, WalkMesh > meshes;
 };

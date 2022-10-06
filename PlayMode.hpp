@@ -2,7 +2,7 @@
 
 #include "Scene.hpp"
 #include "WalkMesh.hpp"
-
+#include "Sound.hpp"
 #include <glm/glm.hpp>
 
 #include <vector>
@@ -17,6 +17,9 @@ struct PlayMode : Mode {
 	virtual void update(float elapsed) override;
 	virtual void draw(glm::uvec2 const &drawable_size) override;
 
+	// helper functions
+	void get_transforms();
+	void init(int i);
 	//----- game state -----
 
 	//input tracking:
@@ -28,12 +31,53 @@ struct PlayMode : Mode {
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
 
+
+	// Get all Transforms
+	//Scene::Transform *Barrel = nullptr;
+	//Scene::Transform *Enemy_Car1 = nullptr;
+	//Scene::Transform *Enemy_Car2 = nullptr;
+	//Scene::Transform *Enemy_Car3 = nullptr;
+	//Scene::Transform *Enemy_Car4 = nullptr;
+	//
+	//Scene::Transform *Rain1 = nullptr;
+	//Scene::Transform *Rain2 = nullptr;
+	//Scene::Transform *Rain3 = nullptr;
+//
+	//Scene::Transform *Side_Ground = nullptr;
+	//Scene::Transform *Trees1 = nullptr;
+	//Scene::Transform *Trees2 = nullptr;
+
+	Scene::Transform* obstacle[42];
+
+	//Scene::Transform *Reference = nullptr;
+
+		
+	//Scene::Transform *WalkMesh = nullptr;
+
+	Scene::Camera *camera = nullptr;
+
+	// Car Logic
+	float car_speed;
+	float max_speed;
+
+	// Rain Loc
+	glm::vec3 Rain1_pos, Rain2_pos, Rain3_pos;
+	float rain_rate;
+
+	// Sound Value
+	float rain_vol, car_vol, main1_vol;
+
+	std::shared_ptr< Sound::PlayingSample > RainLoop;
+	std::shared_ptr< Sound::PlayingSample > CarLoop;
+	std::shared_ptr< Sound::PlayingSample > Main1Loop;
+
+
 	//player info:
 	struct Player {
 		WalkPoint at;
 		//transform is at player's feet and will be yawed by mouse left/right motion:
 		Scene::Transform *transform = nullptr;
 		//camera is at player's head and will be pitched by mouse up/down motion:
-		Scene::Camera *camera = nullptr;
+		//
 	} player;
 };

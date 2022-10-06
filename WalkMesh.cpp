@@ -43,7 +43,25 @@ WalkMesh::WalkMesh(std::vector< glm::vec3 > const &vertices_, std::vector< glm::
 //project pt to the plane of triangle a,b,c and return the barycentric weights of the projected point:
 glm::vec3 barycentric_weights(glm::vec3 const &a, glm::vec3 const &b, glm::vec3 const &c, glm::vec3 const &pt) {
 	//TODO: implement!
-	return glm::vec3(0.25f, 0.25f, 0.5f);
+	// We first get the normal of the triangle plane:
+
+	glm::vec3 ab = b - a;
+	glm::vec3 bc = c - b;
+	glm::vec3 ca = a - c;
+
+	glm::vec3 n  = glm::cross(ab, bc);
+	n = n / glm::length(n);
+
+	float A = 0.5f * glm::dot(glm::cross(ab, bc), n);
+	float A3 = 0.5f * glm::dot(glm::cross(ca, (pt - c)), n);
+	float A2 = 0.5f * glm::dot(glm::cross(bc, (pt - b)), n);
+	float w1, w2, w3;
+	w2 = A2/A;
+	w3 = A3/A;
+
+	w1 = 1.0f - w2 - w3;
+	return glm::vec3(w2, w3, w1);
+
 }
 
 WalkPoint WalkMesh::nearest_walk_point(glm::vec3 const &world_point) const {
@@ -119,12 +137,34 @@ void WalkMesh::walk_in_triangle(WalkPoint const &start, glm::vec3 const &step, W
 
 	assert(time_);
 	auto &time = *time_;
+	// Vertex Coordinates:
+	glm::vec3 const &a = vertices[start.indices.x];
+	glm::vec3 const &b = vertices[start.indices.y];
+	glm::vec3 const &c = vertices[start.indices.z];
 
 	glm::vec3 step_coords;
 	{ //project 'step' into a barycentric-coordinates direction:
 		//TODO
-		step_coords = glm::vec3(0.0f);
+		
+		// We first get the normal of the triangle plane:
+			glm::vec3 vec1 = b - a;
+			glm::vec3 vec2 = c - b;
+			glm::vec3 normal = glm::cross(vec1, vec2);
+
+		// Projection = 
+		// (dot(step, normal)/|normal|^2)*normal
+		float len_normal = glm::length(normal);
+		step_coords = -step + (glm::dot(step, normal)/(len_normal*len_normal))*normal; // Working by giving -ve projection for some reason
 	}
+
+	// Converting step into baryocentric velocity would be as follows - 
+	glm::vec3 velocity_wts; //Vector weights
+	 // Step Coordinate weights
+	glm::vec3 start_coords = to_world_point(start);
+	glm::vec3 final_coords = step_coords + start_coords;
+	glm::vec3 step_wts = barycentric_weights(a, b, c, final_coords);
+
+	velocity_wts = start.weights - step_wts;
 	
 	//if no edge is crossed, event will just be taking the whole step:
 	time = 1.0f;
@@ -133,6 +173,60 @@ void WalkMesh::walk_in_triangle(WalkPoint const &start, glm::vec3 const &step, W
 	//figure out which edge (if any) is crossed first.
 	// set time and end appropriately.
 	//TODO
+	// Find w + tz
+	float sx = start.weights.x + time*velocity_wts.x;
+	float sy = start.weights.y + time*velocity_wts.y;
+	float sz = start.weights.z + time*velocity_wts.z;
+	float min = sx;
+	if(min > sy) min = sy;
+	if(min > sz) min = sz;  
+
+	if(sx == min && min < 0) {
+	time = -start.weights.x/velocity_wts.x;
+	end.weights += time*velocity_wts;
+	// Swap 
+		auto temp_index_x = end.indices.x;
+		auto temp_weight_x = end.weights.x;
+		auto temp_index_y = end.indices.y;
+		auto temp_weight_y = end.weights.y;
+		auto temp_index_z = end.indices.z;
+		auto temp_weight_z = end.weights.z;
+
+		end.indices.x = temp_index_y;
+		end.weights.x = temp_weight_y;
+		end.indices.y = temp_index_z;
+		end.weights.y = temp_weight_z;
+		end.indices.z = temp_index_x;
+		end.weights.z = temp_weight_x;
+
+	}
+	else if(sy == min && min < 0) {
+	time = -start.weights.y/velocity_wts.y;
+	end.weights += time*velocity_wts;
+	// Swap 
+		auto temp_index_x = end.indices.x;
+		auto temp_weight_x = end.weights.x;
+		auto temp_index_y = end.indices.y;
+		auto temp_weight_y = end.weights.y;
+		auto temp_index_z = end.indices.z;
+		auto temp_weight_z = end.weights.z;
+
+		end.indices.x = temp_index_z;
+		end.weights.x = temp_weight_z;
+		end.indices.y = temp_index_x;
+		end.weights.y = temp_weight_x;
+		end.indices.z = temp_index_y;
+		end.weights.z = temp_weight_y;
+	}
+	else if(sz == min && min < 0) {
+		time = -start.weights.z/velocity_wts.z;
+		end.weights += time*velocity_wts;
+	}
+	else {
+		end.weights += time*velocity_wts;
+	}
+
+
 
 	//Remember: our convention is that when a WalkPoint is on an edge,
 	// then wp.weights.z == 0.0f (so will likely need to re-order the indices)
@@ -147,16 +241,46 @@ bool WalkMesh::cross_edge(WalkPoint const &start, WalkPoint *end_, glm::quat *ro
 
 	assert(start.weights.z == 0.0f); //*must* be on an edge.
 	glm::uvec2 edge = glm::uvec2(start.indices);
-
+	
 	//check if 'edge' is a non-boundary edge:
-	if (edge.x == edge.y /* <-- TODO: use a real check, this is just here so code compiles */) {
+	if (start.weights.z == 0 /* <-- TODO: use a real check, this is just here so code compiles */) {
 		//it is!
-
 		//make 'end' represent the same (world) point, but on triangle (edge.y, edge.x, [other point]):
 		//TODO
+		end = start;
+		glm::uvec2 new_edge = glm::uvec2(edge.y, edge.x);
+		uint32_t new_z = 0;
+		 for (auto x : next_vertex) {
+			if(x.first == new_edge) {
+				new_z = x.second;
+				break;
+			}
+		 }
+      		
+		
+		
+		//uint32_t new_z = next_vertex[new_edge];
+		end.indices.z = new_z;
+		// Swap x, y
+		end.indices.x = start.indices.y;
+		end.weights.x = start.weights.y;
+		end.indices.y = start.indices.x;
+		end.weights.y = start.weights.x;
+		
+
 
 		//make 'rotation' the rotation that takes (start.indices)'s normal to (end.indices)'s normal:
-		//TODO
+		//TODO 
+		// Taken from https://math.stackexchange.com/questions/2356649/how-to-find-the-quaternion-representing-the-rotation-between-two-3-d-vectors
+		glm::vec3 v1 = to_world_triangle_normal(start); // start vector
+		glm::vec3 v2 = to_world_triangle_normal(end); // end vector
+		glm::vec3 cross = glm::cross(v1, v2);
+		float dot = glm::dot(v1,v2);
+		glm::vec3 n = cross/glm::length(cross); 
+		float theta = glm::atan(glm::length(cross)/dot);
+		
+		rotation = glm::quat(glm::cos(theta/2.0f), glm::sin(theta/2)*n);
+
 
 		return true;
 	} else {
@@ -246,5 +370,12 @@ WalkMesh const &WalkMeshes::lookup(std::string const &name) const {
 	if (f == meshes.end()) {
 		throw std::runtime_error("WalkMesh with name '" + name + "' not found.");
 	}
+	return f->second;
+}
+
+WalkMesh const &WalkMeshes::first() const {
+	auto f = meshes.begin();
+	std::cout << "Meshes" << std::endl;
+	for(auto j : meshes) {std::cout << "\nCases : "<< j.first << std::endl;}
 	return f->second;
 }
